@@ -1,5 +1,12 @@
 import requests
 import sqlite3
+import logging
+
+logging.basicConfig(
+    filename='pipeline.log',
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s',
+)
 
 KP_URL = 'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json'
 WIND_URL = 'https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json'
@@ -35,6 +42,7 @@ MAG_MAPPING = {
     'by_gsm': 'by_gsm', 
     'overall_quality': 'overall_quality'
 }
+
 
 def extract_data(url):
     """Download a NOAA JSON feed and return its records.
@@ -93,6 +101,9 @@ def load_data(con, table, columns, rows):
         columns: The column names, in the same order as the values
             in each row (usually mapping.keys()).
         rows: The list of tuples from transform_data.
+
+    Returns:
+        The number of new rows inserted (duplicate rows are not counted)
     """
     cur = con.cursor()
     joined = ', '.join(columns)
@@ -101,23 +112,44 @@ def load_data(con, table, columns, rows):
     sql = f'INSERT OR IGNORE INTO {table}({joined}) VALUES ({placeholder})'
 
     cur.executemany(sql, rows)
+    return cur.rowcount
 
 
 con = sqlite3.connect('aurora_cast.db')
+logging.info('Pipeline run started')
 
-kp_records = extract_data(KP_URL)
-kp_rows = transform_data(kp_records, KP_MAPPING)
-load_data(con, 'kp_readings', KP_MAPPING.keys(), kp_rows)
-con.commit()
 
-wind_records = extract_data(WIND_URL)
-wind_rows = transform_data(wind_records, WIND_MAPPING)
-load_data(con, 'rtsw_wind', WIND_MAPPING.keys(), wind_rows)
-con.commit()
+try:
+    kp_records = extract_data(KP_URL)
+    kp_rows = transform_data(kp_records, KP_MAPPING)
+    kp_new = load_data(con, 'kp_readings', KP_MAPPING.keys(), kp_rows)
+    con.commit()
+    logging.info(f'Kp readings loaded: {len(kp_records)} fetched - {kp_new} added')
+except Exception as error:
+    logging.exception('Failed to load Kp records')
+    con.rollback()
 
-mag_records = extract_data(MAG_URL)
-mag_rows = transform_data(mag_records, MAG_MAPPING)
-load_data(con, 'rtsw_mag', MAG_MAPPING.keys(), mag_rows)
-con.commit()
 
+try:
+    wind_records = extract_data(WIND_URL)
+    wind_rows = transform_data(wind_records, WIND_MAPPING)
+    wind_new = load_data(con, 'rtsw_wind', WIND_MAPPING.keys(), wind_rows)
+    con.commit()
+    logging.info(f'Wind readings loaded: {len(wind_records)} fetched - {wind_new} added')
+except Exception as error:
+    logging.exception('Failed to load Wind records')
+    con.rollback()
+
+
+try:
+    mag_records = extract_data(MAG_URL)
+    mag_rows = transform_data(mag_records, MAG_MAPPING)
+    mag_new = load_data(con, 'rtsw_mag', MAG_MAPPING.keys(), mag_rows)
+    con.commit()
+    logging.info(f'Mag readings loaded: {len(mag_records)} fetched - {mag_new} added')
+except Exception as error:
+    logging.exception('Failed to load Mag records')
+    con.rollback()
+
+logging.info('Pipeline run complete')
 con.close()
