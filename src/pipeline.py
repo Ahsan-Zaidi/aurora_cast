@@ -90,7 +90,8 @@ def transform_data(records, mapping):
 
     For each record, pulls out only the fields listed in the mapping,
     in the mapping's order, and packs them into a tuple. Fields not
-    in the mapping are left out.
+    in the mapping are left out. Records missing any mapped fields are
+    skipped.
 
     Args:
         records: The list of records from extract_data.
@@ -98,13 +99,16 @@ def transform_data(records, mapping):
             NOAA field names (values).
 
     Returns:
-        A list of tuples, one per record, in column order.
+        A list of tuples, one per complete record, in column order.
     """
     results = []
     for record in records:
-        row = []
-        for key in mapping.values():
-            row.append(record[key])
+        try:
+            row = []
+            for key in mapping.values():
+                row.append(record[key])
+        except KeyError:
+            continue
         results.append(tuple(row))
     return results
 
@@ -147,11 +151,14 @@ for feed in FEEDS:
     try:
         records = extract_data(feed['url'])
         rows = transform_data(records, feed['mapping'])
+        skipped = len(records) - len(rows)
+        if skipped > 0:
+            logging.warning(f'{feed["name"]} skipped {skipped} incomplete records')
         new = load_data(con, feed['table'], feed['mapping'].keys(), rows)
         con.commit()
         if new <= 0:
             logging.warning(f'{feed["name"]} returned no new data: {len(records)} fetched - {new} data added')
-        elif new == len(records):
+        elif new == len(rows):
             logging.warning(f'{feed["name"]}: possible gap in data {len(records)} fetched - {new} data added')
         else:
             logging.info(f'{feed["name"]} readings loaded: {len(records)} fetched - {new} added')
