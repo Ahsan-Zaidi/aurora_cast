@@ -143,29 +143,45 @@ def load_data(con, table, columns, rows):
     return cur.rowcount
 
 
-con = sqlite3.connect('aurora_cast.db')
-logging.info('Pipeline run started')
+def main():
+    """Run the pipeline once for every feed in FEEDS.
+
+    For each feed: extract the records from NOAA, transform them into
+    rows, load the rows into the feed's table, and commit. Each feed
+    runs in its own try block, so one failure is logged and rolled
+    back without stopping the others.
+
+    Logs the start and end of every run, how many records were fetched
+    and added per feed, and warnings for skipped records, stale feeds
+    (nothing new), and possible gaps (everything new).
+    """
+    con = sqlite3.connect('aurora_cast.db')
+    logging.info('Pipeline run started')
 
 
-for feed in FEEDS:
-    try:
-        records = extract_data(feed['url'])
-        rows = transform_data(records, feed['mapping'])
-        skipped = len(records) - len(rows)
-        if skipped > 0:
-            logging.warning(f'{feed["name"]} skipped {skipped} incomplete records')
-        new = load_data(con, feed['table'], feed['mapping'].keys(), rows)
-        con.commit()
-        if new <= 0:
-            logging.warning(f'{feed["name"]} returned no new data: {len(records)} fetched - {new} data added')
-        elif new == len(rows):
-            logging.warning(f'{feed["name"]}: possible gap in data {len(records)} fetched - {new} data added')
-        else:
-            logging.info(f'{feed["name"]} readings loaded: {len(records)} fetched - {new} added')
-    except Exception:
-        logging.exception(f'Failed to load {feed["name"]} records')
-        con.rollback()
-        
+    for feed in FEEDS:
+        try:
+            records = extract_data(feed['url'])
+            rows = transform_data(records, feed['mapping'])
+            skipped = len(records) - len(rows)
+            if skipped > 0:
+                logging.warning(f'{feed["name"]} skipped {skipped} incomplete records')
+            new = load_data(con, feed['table'], feed['mapping'].keys(), rows)
+            con.commit()
+            if new <= 0:
+                logging.warning(f'{feed["name"]} returned no new data: {len(records)} fetched - {new} data added')
+            elif new == len(rows):
+                logging.warning(f'{feed["name"]}: possible gap in data {len(records)} fetched - {new} data added')
+            else:
+                logging.info(f'{feed["name"]} readings loaded: {len(records)} fetched - {new} added')
+        except Exception:
+            logging.exception(f'Failed to load {feed["name"]} records')
+            con.rollback()
+            
 
-logging.info('Pipeline run complete')
-con.close()
+    logging.info('Pipeline run complete')
+    con.close()
+
+
+if __name__ == '__main__':
+    main()
