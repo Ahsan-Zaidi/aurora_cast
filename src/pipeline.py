@@ -43,6 +43,30 @@ MAG_MAPPING = {
     'overall_quality': 'overall_quality'
 }
 
+# Each feed the pipeline loads
+# Add a new dictionary here to bring in a new data source
+
+FEEDS = [
+    {
+        'name': 'Kp',
+        'url': KP_URL,
+        'table': 'kp_readings',
+        'mapping': KP_MAPPING,
+    },
+    {
+        'name': 'Wind',
+        'url': WIND_URL,
+        'table': 'rtsw_wind',
+        'mapping': WIND_MAPPING,
+    },
+    {
+        'name': 'Mag',
+        'url': MAG_URL,
+        'table': 'rtsw_mag',
+        'mapping': MAG_MAPPING,
+    },
+]
+
 
 def extract_data(url):
     """Download a NOAA JSON feed and return its records.
@@ -119,37 +143,22 @@ con = sqlite3.connect('aurora_cast.db')
 logging.info('Pipeline run started')
 
 
-try:
-    kp_records = extract_data(KP_URL)
-    kp_rows = transform_data(kp_records, KP_MAPPING)
-    kp_new = load_data(con, 'kp_readings', KP_MAPPING.keys(), kp_rows)
-    con.commit()
-    logging.info(f'Kp readings loaded: {len(kp_records)} fetched - {kp_new} added')
-except Exception as error:
-    logging.exception('Failed to load Kp records')
-    con.rollback()
-
-
-try:
-    wind_records = extract_data(WIND_URL)
-    wind_rows = transform_data(wind_records, WIND_MAPPING)
-    wind_new = load_data(con, 'rtsw_wind', WIND_MAPPING.keys(), wind_rows)
-    con.commit()
-    logging.info(f'Wind readings loaded: {len(wind_records)} fetched - {wind_new} added')
-except Exception as error:
-    logging.exception('Failed to load Wind records')
-    con.rollback()
-
-
-try:
-    mag_records = extract_data(MAG_URL)
-    mag_rows = transform_data(mag_records, MAG_MAPPING)
-    mag_new = load_data(con, 'rtsw_mag', MAG_MAPPING.keys(), mag_rows)
-    con.commit()
-    logging.info(f'Mag readings loaded: {len(mag_records)} fetched - {mag_new} added')
-except Exception as error:
-    logging.exception('Failed to load Mag records')
-    con.rollback()
+for feed in FEEDS:
+    try:
+        records = extract_data(feed['url'])
+        rows = transform_data(records, feed['mapping'])
+        new = load_data(con, feed['table'], feed['mapping'].keys(), rows)
+        con.commit()
+        if new <= 0:
+            logging.warning(f'{feed["name"]} returned no new data: {len(records)} fetched - {new} data added')
+        elif new == len(records):
+            logging.warning(f'{feed["name"]}: possible gap in data {len(records)} fetched - {new} data added')
+        else:
+            logging.info(f'{feed["name"]} readings loaded: {len(records)} fetched - {new} added')
+    except Exception:
+        logging.exception(f'Failed to load {feed["name"]} records')
+        con.rollback()
+        
 
 logging.info('Pipeline run complete')
 con.close()
