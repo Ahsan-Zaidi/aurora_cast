@@ -1,6 +1,9 @@
 import requests
 import sqlite3
 import logging
+import boto3
+import json
+from datetime import datetime, timezone
 
 logging.basicConfig(
     filename='pipeline.log',
@@ -12,6 +15,10 @@ KP_URL = 'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json'
 WIND_URL = 'https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json'
 MAG_URL = 'https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json'
 
+# S3 bucket for raw NOAA data (us-east-1). The pipeline's IAM identity
+# can only upload under raw/, so this is write-only by design.
+
+S3_BUCKET = 'aurora-cast-data-ahsan-v1'
 
 # Each mapping connects the database column (key) to the NOAA field it's pulled from (value)
 # The order of the mapping matters: transform_data and load_data both rely on it lining up
@@ -143,25 +150,89 @@ def load_data(con, table, columns, rows):
     return cur.rowcount
 
 
+def build_s3_key(feed_name, run_time):
+    """Build the S3 key (file path) for one feed's raw data file.
+
+    Keys follow the layout raw/feed=<feed>/date=<YYYY-MM-DD>/<HHMMSS>.json,
+    so Athena can treat feed and date as partitions and read only the
+    folders a query needs. The feed name is lowercased to keep paths
+    consistent, since S3 keys are case-sensitive.
+
+    Args:
+        feed_name: The feed's name from FEEDS, such as 'Wind'.
+        run_time: A UTC datetime for this pipeline run. Created once
+        in main() so every feed from the same run shares one timestamp.
+
+    Returns:
+        The key as a string, like 'raw/feed=wind/date=2026-10-19/160316.json'.
+    """
+    feed = feed_name.lower()
+    date_str = run_time.strftime('%Y-%m-%d')
+    time_str = run_time.strftime('%H%M%S')
+    key = f'raw/feed={feed}/date={date_str}/{time_str}.json'
+    return key
+
+
+def save_raw_to_s3(s3, bucket, key, records):
+    """Upload one feed's records to S3 as a JSON file, exactly as received.
+
+    Stores the raw NOAA data before any transformation, so the original
+    can always be reprocessed later if the transform logic changes.
+
+    Args:
+        s3: A boto3 S3 client, created once in main().
+        bucket: The name of the S3 bucket to upload to.
+        key: The object's key, from build_s3_key.
+        records: The list of records from extract_data.
+
+    Raises:
+        botocore.exceptions.ClientError: If the upload fails, for example
+        because the credentials lack permission to write to the bucket.
+    """
+    json_text = json.dumps(records)
+    s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=json_text,
+        ContentType='application/json',
+    )
+
+
 def main():
     """Run the pipeline once for every feed in FEEDS.
 
-    For each feed: extract the records from NOAA, transform them into
-    rows, load the rows into the feed's table, and commit. Each feed
-    runs in its own try block, so one failure is logged and rolled
-    back without stopping the others.
+    Before the loop, open the SQLite connection, creates the S3 client,
+    and records the run's start time in UTC. The same run time is used
+    for every feed, so all files from one run share a timestamp.
 
-    Logs the start and end of every run, how many records were fetched
-    and added per feed, and warnings for skipped records, stale feeds
-    (nothing new), and possible gaps (everything new).
+    For each feed:
+        1. Extract the records from NOAA.
+        2. Save the raw records to S3, unchanged, under a key built
+           from the feed name and run time.
+        3. Transform the records into rows.
+        4. Load the rows into the feed's SQLite table and commit.
+
+    Each feed runs in its own try block, so if any step fails, the error
+    is logged, that feed's pending database changes are rolled back, and
+    the next feed still runs. An S3 upload failure also skips that
+    feed's database load.
+
+    Logs the start and end of every run, each S3 upload's key, how many
+    records were fetched and added per feed, and warnings for skipped
+    records, stale feeds (nothing new), and possible gaps (everything new).
     """
     con = sqlite3.connect('aurora_cast.db')
+    run_time = datetime.now(timezone.utc)
+    s3_client = boto3.client('s3')
     logging.info('Pipeline run started')
 
 
     for feed in FEEDS:
         try:
             records = extract_data(feed['url'])
+            key = build_s3_key(feed['name'], run_time)
+            save_raw_to_s3(s3_client, S3_BUCKET, key, records)
+            logging.info(f'{feed["name"]} was saved - key: {key}')
             rows = transform_data(records, feed['mapping'])
             skipped = len(records) - len(rows)
             if skipped > 0:
