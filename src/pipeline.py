@@ -79,27 +79,33 @@ def build_s3_key(feed_name, run_time):
 
 
 def save_raw_to_s3(s3, bucket, key, records):
-    """Upload one feed's records to S3 as a JSON file, exactly as received.
+    """Upload one feed's records to S3 as a JSON Lines file.
 
-    Stores the raw NOAA data before any transformation, so the original
-    can always be reprocessed later if the transform logic changes.
+    Writes each record as its own JSON object on its own line (the JSON
+    Lines format), which is what Athena expects: it reads one line as one
+    row. The records' contents are saved exactly as NOAA sent them, before
+    any transformation, so the original data can always be reprocessed
+    later if the transform logic changes.
 
     Args:
         s3: A boto3 S3 client, created once in main().
         bucket: The name of the S3 bucket to upload to.
         key: The object's key, from build_s3_key.
-        records: The list of records from extract_data.
+        records: The list of records (dictionaries) from extract_data.
 
     Raises:
         botocore.exceptions.ClientError: If the upload fails, for example
         because the credentials lack permission to write to the bucket.
     """
-    json_text = json.dumps(records)
+    json_lines = []
+    for record in records:
+        json_lines.append(json.dumps(record))
+    result = "\n".join(json_lines)
     s3.put_object(
         Bucket=bucket,
         Key=key,
-        Body=json_text,
-        ContentType='application/json',
+        Body=result,
+        ContentType='application/x-ndjson',
     )
 
 
