@@ -1,0 +1,1 @@
+CREATE DATABASE aurora_cast;
