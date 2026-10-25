@@ -3,7 +3,6 @@
 -- fetch_date = the day the file was FETCHED (from the date= folder), not the reading's date.
 -- Run once in Athena (us-east-1). Dropping this table never deletes the S3 files.
 
-
 CREATE EXTERNAL TABLE aurora_cast.kp_raw (
   time_tag     string,
   kp_index     int,
