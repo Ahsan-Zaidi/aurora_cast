@@ -3,6 +3,7 @@ import json
 
 BUCKET = 'aurora-cast-data-ahsan-v1'
 PREFIX = 'raw/'
+DRY_RUN = True
 
 
 def main():
@@ -30,7 +31,17 @@ def main():
                 line_count = len(new_text.splitlines())
 
                 if record_count == line_count:
-                    print(f'{key}: {record_count} records, {line_count} lines, OK')
+                    if not DRY_RUN:
+                        s3.put_object(
+                            Bucket=BUCKET,
+                            Key=key,
+                            Body=new_text,
+                            ContentType='application/x-ndjson',
+                        )
+                        print(f'{key}: {record_count} records, {line_count} lines, CONVERTED')
+                    else:
+                        print(f'{key}: {record_count} records, {line_count} lines, OK (dry run)')
+                        
                 else:
                     print(f'{key}: {record_count} records, {line_count} lines, MISMATCH')
                     mismatch_count += 1
