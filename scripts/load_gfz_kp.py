@@ -17,10 +17,16 @@ def parse_kp(text):
             continue
         parts = line.split()
         hour = int(float(parts[3]))
+        kp = float(parts[7])
+        if kp == -1:
+            kp = None
+        ap = int(parts[8])
+        if ap == -1:
+            ap = None
         record = {
             'block_start': f'{parts[0]}-{parts[1]}-{parts[2]}T{hour:02d}:00:00',
-            'kp': float(parts[7]),
-            'ap': int(parts[8]),
+            'kp': kp,
+            'ap': ap,
             'd_flag': int(parts[9])
         }
         results.append(record)
@@ -31,6 +37,10 @@ def main():
     text = extract_data(GFZ_URL)
     gfz_data = parse_kp(text)
     print(len(gfz_data))
+    missing_kp = sum(1 for record in gfz_data if record['kp'] is None)
+    print(f'Missing kp: {missing_kp}')
+    missing_ap = sum(1 for record in gfz_data if record['ap'] is None)
+    print(f'Missing ap: {missing_ap}')
     print(gfz_data[0])
     print(gfz_data[-1])
 
