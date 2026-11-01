@@ -1,7 +1,11 @@
 import requests
+import json
+import boto3
 
 
 GFZ_URL = "https://kp.gfz.de/fileadmin/files_for_gfz_cms/Kp_ap_since_1932.txt"
+S3_BUCKET = "aurora-cast-data-ahsan-v1"
+KEY = "history/source=gfz_kp/kp_since_1932.jsonl"
 
 
 def extract_data(url):
@@ -33,10 +37,25 @@ def parse_kp(text):
     return results
 
 
+def save_to_s3(s3, bucket, key, records):
+    json_lines = []
+    for record in records:
+        json_lines.append(json.dumps(record))
+    result = "\n".join(json_lines)
+    s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=result,
+        ContentType='application/x-ndjson',
+    )
+
+
 def main():
+    s3_client = boto3.client('s3')
     text = extract_data(GFZ_URL)
     gfz_data = parse_kp(text)
-    print(len(gfz_data))
+    save_to_s3(s3_client, S3_BUCKET, KEY, gfz_data)
+    print(f'Uploaded {len(gfz_data)} records to {KEY}')
     missing_kp = sum(1 for record in gfz_data if record['kp'] is None)
     print(f'Missing kp: {missing_kp}')
     missing_ap = sum(1 for record in gfz_data if record['ap'] is None)
