@@ -7,14 +7,14 @@
 Split by time, never randomly: neighboring blocks are nearly identical,
 so a random split would leak test answers into training.
 
-Usage: python model/split.py
+Usage: python model/split.py   (prints sizes and storm counts per set)
 """
+
 import pandas as pd
 
 
 def load_splits():
     """Load training_blocks.csv and return (train, valid, test), split by year."""
-
     df = pd.read_csv('data/training_blocks.csv')
     df['block_ts'] = pd.to_datetime(df['block_ts'])
 
@@ -28,7 +28,9 @@ def load_splits():
 
 
 def main():
+    """Print the size of each set and how many storms it contains."""
     train, valid, test = load_splits()
+
     # The three sizes must add up to the full table (no row lost or doubled)
     print(f'train: {len(train)}')
     print(f'valid: {len(valid)}')
