@@ -10,10 +10,12 @@ Usage: python model/train.py
 from split import load_splits
 from metrics import score
 from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.inspection import permutation_importance
 
 
 FEATURES = ['kp', 'prev_kp', 'min_bz', 'max_bt', 'avg_speed', 'avg_density']
 TARGET = 'next_kp'
+
 
 
 def main():
@@ -39,6 +41,17 @@ def main():
         print(f"{'Model >=' + str(threshold):14} MAE {model_results['mae']:.3f} | "
               f"hit rate {model_results['hit_rate']:.2f}% | "
               f"false alarms {model_results['false_alarm_rate']:.2f}%")
+
+    # Permutation importance: shuffle one feature at a time on valid
+    # and measure how much MAE gets worse (bigger = model relies on it more)
+    r = permutation_importance(model, valid[FEATURES], valid[TARGET],
+                               n_repeats=10, random_state=42,
+                               scoring="neg_mean_absolute_error")
+
+    print("\nFeature importance (MAE increase when shuffled):")
+    pairs = zip(FEATURES, r.importances_mean)
+    for name, s in sorted(pairs, key=lambda p: p[1], reverse=True):
+        print(f"{name:14} {s:.3f}")
 
 
 if __name__ == '__main__':
