@@ -1,3 +1,12 @@
+"""Train the gradient boosting model and compare it with persistence on validation.
+
+The model learns from train (1995-2015) and forecasts valid (2016-2019),
+which it has never seen. Its storm scores are shown at several thresholds:
+the forecasts stay the same, only how they are read as "storm" changes.
+
+Usage: python model/train.py
+"""
+
 from split import load_splits
 from metrics import score
 from sklearn.ensemble import HistGradientBoostingRegressor
@@ -8,23 +17,28 @@ TARGET = 'next_kp'
 
 
 def main():
+    """Train on train, forecast valid, and print persistence vs model scores."""
     train, valid, test = load_splits()
 
     x_train = train[FEATURES]
     y_train = train[TARGET]
 
-    model = HistGradientBoostingRegressor()
+    model = HistGradientBoostingRegressor(random_state=42)
     model.fit(x_train, y_train)
 
     predictions = model.predict(valid[FEATURES])
-    model_results = score(valid[TARGET], predictions)
-    base_results = score(valid[TARGET], valid['kp'])
 
-    for name, results in [('Persistence', base_results), ('Model', model_results)]:
-        print(f"{name:12} MAE {results['mae']:.3f} | "
-            f"exact {results['exact']:.2f}% | "
-            f"hit rate {results['hit_rate']:.2f}% | "
-            f"false alarms {results['false_alarm_rate']:.2f}%")
+    base_results = score(valid[TARGET], valid['kp'])
+    print(f"{'Persistence':14} MAE {base_results['mae']:.3f} | "
+          f"hit rate {base_results['hit_rate']:.2f}% | "
+          f"false alarms {base_results['false_alarm_rate']:.2f}%")
+
+    # Same predictions, read as "storm" at different thresholds (no retraining)
+    for threshold in [5, 4.4, 4.33, 4.25, 4.2]:
+        model_results = score(valid[TARGET], predictions, threshold)
+        print(f"{'Model >=' + str(threshold):14} MAE {model_results['mae']:.3f} | "
+              f"hit rate {model_results['hit_rate']:.2f}% | "
+              f"false alarms {model_results['false_alarm_rate']:.2f}%")
 
 
 if __name__ == '__main__':
