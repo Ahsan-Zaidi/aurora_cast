@@ -10,12 +10,14 @@ missing every storm; the two storm scores catch that.
 """
 
 
-def score(truth, forecast):
+def score(truth, forecast, storm_threshold=5):
     """Score a forecast against the truth.
 
     Args:
         truth: The actual Kp of each block (e.g. valid['next_kp']).
         forecast: The predicted Kp of each block, same rows and order.
+        storm_threshold: The forecast counts as a predicted storm at or above
+            this value (default 5). The truth always uses 5.
 
     Returns:
         A dict with mae, exact, hit_rate and false_alarm_rate.
@@ -27,7 +29,7 @@ def score(truth, forecast):
     exact = (forecast == truth).mean() * 100
 
     actual_storm = truth >= 5
-    predicted_storm = forecast >= 5
+    predicted_storm = forecast >= storm_threshold
 
     # Compare the True/False columns row by row first, then count with .sum()
     hits = (actual_storm & predicted_storm).sum()
