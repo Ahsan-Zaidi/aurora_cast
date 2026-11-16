@@ -11,6 +11,7 @@ from split import load_splits
 from metrics import score
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.inspection import permutation_importance
+import numpy as np
 
 
 FEATURES = ['kp', 'prev_kp', 'min_bz', 'max_bt', 'avg_speed', 'avg_density']
@@ -24,6 +25,7 @@ def main():
 
     x_train = train[FEATURES]
     y_train = train[TARGET]
+
 
     model = HistGradientBoostingRegressor(random_state=42)
     model.fit(x_train, y_train)
