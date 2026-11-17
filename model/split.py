@@ -13,9 +13,9 @@ Usage: python model/split.py   (prints sizes and storm counts per set)
 import pandas as pd
 
 
-def load_splits():
-    """Load training_blocks.csv and return (train, valid, test), split by year."""
-    df = pd.read_csv('data/training_blocks.csv')
+def load_splits(path='data/training_blocks.csv'):
+    """Load a training table CSV (v1 by default) and return (train, valid, test), split by year."""
+    df = pd.read_csv(path)
     df['block_ts'] = pd.to_datetime(df['block_ts'])
 
     year = df['block_ts'].dt.year

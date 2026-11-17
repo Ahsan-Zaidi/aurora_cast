@@ -4,6 +4,8 @@ The model learns from train (1995-2015) and forecasts valid (2016-2019),
 which it has never seen. Its storm scores are shown at several thresholds:
 the forecasts stay the same, only how they are read as "storm" changes.
 
+Uses training_blocks_v2.csv (adds last-hour solar wind, see experiments.md).
+
 Usage: python model/train.py
 """
 
@@ -11,21 +13,21 @@ from split import load_splits
 from metrics import score
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.inspection import permutation_importance
-import numpy as np
 
 
-FEATURES = ['kp', 'prev_kp', 'min_bz', 'max_bt', 'avg_speed', 'avg_density']
+# v2 features. The last_ columns do most of the work; the 3-hour versions stay
+# as backups for when the last hour is missing (common during storms). See Experiment 3.
+FEATURES = ['kp', 'prev_kp', 'min_bz', 'max_bt', 'avg_speed', 'avg_density',
+            'last_speed', 'last_bz', 'last_bt', 'last_density']
 TARGET = 'next_kp'
-
 
 
 def main():
     """Train on train, forecast valid, and print persistence vs model scores."""
-    train, valid, test = load_splits()
+    train, valid, test = load_splits('data/training_blocks_v2.csv')
 
     x_train = train[FEATURES]
     y_train = train[TARGET]
-
 
     model = HistGradientBoostingRegressor(random_state=42)
     model.fit(x_train, y_train)
