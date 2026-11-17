@@ -118,3 +118,31 @@ MAE was the same, but the storm numbers got a bit worse everywhere. My guess is 
 **For the live pipeline:** The live data is 1-minute readings, not hourly. To match training, "last hour" will need to be built the same way OMNI builds its hourly values (averaging the last 60 minutes of the block).
 
 **New baseline:** v2 (MAE 0.519). Future experiments get compared against this.
+
+---
+
+## Final test result (Model v2)
+**Date:** 2026-11-17
+**Script:** `model/evaluate_test.py` (run once)
+
+**Setup:** Everything was locked in on validation before running: v2 features, same model settings (`random_state=42`), and two thresholds (4.33 as the main one, 5 as the plain storm definition). The model was retrained on train + valid (1995-2019, 73,048 rows) so it learns from the most recent data before 2020. Then it was scored once on test.
+
+Test set: 2020-2026, 19,967 blocks, 507 storms (1 storm is about 0.2% of hit rate).
+
+| | MAE | Hit rate | False alarms |
+|---|---|---|---|
+| Persistence | 0.646 | 51.68% | 48.32% |
+| v2 @ ≥4.33 | 0.536 | 69.23% | 49.64% |
+| v2 @ ≥5 | 0.536 | 44.38% | 23.99% |
+
+**What it means:**
+- MAE is 17% lower than persistence. On validation it was 16% lower. The improvement held up on data the model never saw, so the experiments didn't overfit to validation.
+- At 4.33, the model catches about 89 more storms than persistence with about the same false alarm rate.
+- At 5, it catches a few fewer storms than persistence but has half the false alarms. When it says storm, it's usually right.
+- Test MAE (0.536) is a bit higher than validation (0.519). That's expected, since 2020-2026 covers the active part of the solar cycle and validation was near solar minimum. Persistence got worse by about the same amount (0.618 to 0.646).
+
+**Caveats:**
+- The 4.33 threshold was picked with a model trained on 1995-2015 only. The final model was retrained on more data, which could shift its forecasts a little.
+- These results use GFZ definitive Kp. NOAA's live Kp runs about 0.19 higher on average, so live performance may differ (training-serving skew).
+
+The test set is now used. Any future model changes will need new data to evaluate honestly.
