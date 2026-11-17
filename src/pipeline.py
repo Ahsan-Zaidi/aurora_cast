@@ -13,6 +13,7 @@ logging.getLogger().setLevel(logging.INFO)
 KP_URL = 'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json'
 WIND_URL = 'https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json'
 MAG_URL = 'https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json'
+FORECAST_URL = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json'
 
 # S3 bucket for raw NOAA data (us-east-1). The pipeline's IAM identity
 # can only upload under raw/, so this is write-only by design.
@@ -34,6 +35,10 @@ FEEDS = [
     {
         'name': 'Mag',
         'url': MAG_URL,
+    },
+    {
+        'name': 'noaa_kp_forecast',
+        'url': FORECAST_URL,
     },
 ]
 
